@@ -37,10 +37,19 @@ class _LeadWizardScreenState extends State<LeadWizardScreen> {
   // Step 3 — qualification
   String _stage = 'New';
   String _priority = 'Medium';
-  String _source = 'Phone Enquiry';
+  String _source = 'Direct';
   final _notes = TextEditingController();
 
   static const _steps = ['Contact', 'Trip', 'Qualify', 'Review'];
+
+  // Keys MUST match the backend Lead `Source` enum; values are display labels.
+  static const _sourceOptions = {
+    'Direct': 'Walk-in / Phone / Direct',
+    'Referral': 'Referral',
+    'Website': 'Website',
+    'Social Media': 'Social Media',
+    'Advertisement': 'Advertisement',
+  };
 
   @override
   void dispose() {
@@ -267,11 +276,10 @@ class _LeadWizardScreenState extends State<LeadWizardScreen> {
           DropdownButtonFormField<String>(
             value: _source,
             decoration: const InputDecoration(labelText: 'Lead source'),
-            items: const [
-              'Phone Enquiry', 'Walk-in', 'Referral', 'Website',
-              'Social Media', 'Advertisement', 'Repeat Customer', 'Other'
-            ].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
-            onChanged: (v) => setState(() => _source = v ?? 'Phone Enquiry'),
+            items: _sourceOptions.entries
+                .map((e) => DropdownMenuItem(value: e.key, child: Text(e.value)))
+                .toList(),
+            onChanged: (v) => setState(() => _source = v ?? 'Direct'),
           ),
           const SizedBox(height: 18),
           _field(_notes, 'Notes / requirements', maxLines: 4),
@@ -377,6 +385,7 @@ class _LeadWizardScreenState extends State<LeadWizardScreen> {
     if (min != null) budget['Min'] = min;
     if (max != null) budget['Max'] = max;
 
+    final travellers = int.tryParse(_travelers.text.trim());
     final payload = {
       'FirstName': _firstName.text.trim(),
       'LastName': _lastName.text.trim(),
@@ -384,16 +393,19 @@ class _LeadWizardScreenState extends State<LeadWizardScreen> {
       'Email': _email.text.trim(),
       'Phone': _phone.text.trim(),
       'PrefDestination': _destination.text.trim(),
-      if (_month.text.trim().isNotEmpty) 'PrefMonth': _month.text.trim(),
-      if (int.tryParse(_travelers.text.trim()) != null)
-        'Travelers': int.parse(_travelers.text.trim()),
+      // PrefMonth is a String array on the backend.
+      if (_month.text.trim().isNotEmpty) 'PrefMonth': [_month.text.trim()],
+      // Travelers is an object { Adults, Children, Infants } (Adults >= 1).
+      if (travellers != null && travellers > 0)
+        'Travelers': {'Adults': travellers, 'Children': 0, 'Infants': 0},
       if (budget.length > 1) 'Budget': budget,
       'Description': _notes.text.trim(),
       'LifecycleStage': _stage,
-      'PipelineStage': _stage,
       'Priority': _priority,
-      'LeadSource': _source,
+      // Source must be one of the backend enum values; keep the human label too.
       'Source': _source,
+      'SourceDetails': _sourceOptions[_source] ?? _source,
+      'LeadSource': 'TripClub Operations App',
     };
 
     try {

@@ -171,6 +171,7 @@ class _LeadDetailScreenState extends State<LeadDetailScreen> {
           const SizedBox(height: 14),
           _followUpCard(l),
           const SizedBox(height: 14),
+          _requirementCard(l),
           _contactCard(l),
           const SizedBox(height: 14),
           _timeline(l),
@@ -265,8 +266,9 @@ class _LeadDetailScreenState extends State<LeadDetailScreen> {
               return GestureDetector(
                 onTap: _busy || selected
                     ? null
-                    : () => _patch(
-                        {'LifecycleStage': stage, 'PipelineStage': stage},
+                    // Only LifecycleStage — PipelineStage has a different enum,
+                    // sending a lifecycle value there fails server validation.
+                    : () => _patch({'LifecycleStage': stage},
                         action: 'Stage moved to $stage'),
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 150),
@@ -582,6 +584,155 @@ class _LeadDetailScreenState extends State<LeadDetailScreen> {
       toast: 'Follow-up cleared',
     );
     await ReminderService.instance.cancelLeadFollowUp(_id);
+  }
+
+  Widget _requirementCard(Map<String, dynamic> l) {
+    String budget() {
+      final b = l['Budget'] is Map ? l['Budget'] as Map : const {};
+      final min = b['Min'];
+      final max = b['Max'];
+      final cur = (b['Currency'] ?? 'INR').toString();
+      if (min == null && max == null) return '';
+      if (min != null && max != null) {
+        return '${Fmt.money(min, cur)} – ${Fmt.money(max, cur)}';
+      }
+      return Fmt.money(min ?? max, cur);
+    }
+
+    String travellers() {
+      final t = l['Travelers'] is Map ? l['Travelers'] as Map : const {};
+      final parts = <String>[];
+      int n(dynamic v) => (v is num) ? v.toInt() : int.tryParse('$v') ?? 0;
+      if (n(t['Adults']) > 0) parts.add('${n(t['Adults'])} adult${n(t['Adults']) == 1 ? '' : 's'}');
+      if (n(t['Children']) > 0) parts.add('${n(t['Children'])} child${n(t['Children']) == 1 ? '' : 'ren'}');
+      if (n(t['Infants']) > 0) parts.add('${n(t['Infants'])} infant${n(t['Infants']) == 1 ? '' : 's'}');
+      return parts.join(', ');
+    }
+
+    String travelDates() {
+      final td = l['TravelDates'] is Map ? l['TravelDates'] as Map : const {};
+      final start = Fmt.date(td['StartDate']);
+      final nights = td['Nights'];
+      if (start.isEmpty && nights == null) return '';
+      return [
+        if (start.isNotEmpty) start,
+        if (nights != null && nights != 0) '${nights}N',
+      ].join(' · ');
+    }
+
+    final months = (l['PrefMonth'] is List)
+        ? (l['PrefMonth'] as List).where((e) => '$e'.trim().isNotEmpty).join(', ')
+        : (l['PrefMonth'] ?? '').toString();
+    final tags = (l['Tags'] is List)
+        ? (l['Tags'] as List).map((e) => e.toString()).toList()
+        : <String>[];
+    final score = l['LeadScore'];
+    final desc = (l['Description'] ?? '').toString().trim();
+    final shortTitle = (l['ShortTitle'] ?? '').toString().trim();
+
+    final rows = <(IconData, String, String)>[
+      (Icons.flight_takeoff_rounded, 'Destination',
+          (l['PrefDestination'] ?? l['Destination'] ?? '').toString()),
+      (Icons.account_balance_wallet_outlined, 'Budget', budget()),
+      (Icons.groups_outlined, 'Travellers', travellers()),
+      (Icons.event_outlined, 'Travel dates', travelDates()),
+      (Icons.calendar_month_outlined, 'Preferred month', months),
+      (Icons.label_outline_rounded, 'Reference', shortTitle),
+    ].where((r) => r.$3.trim().isNotEmpty).toList();
+
+    // Hide the card entirely if there's nothing meaningful to show.
+    if (rows.isEmpty && desc.isEmpty && tags.isEmpty && (score == null || score == 0)) {
+      return const SizedBox.shrink();
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: AppCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Text('Trip & requirements',
+                    style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
+                const Spacer(),
+                if (score != null && score != 0)
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: AppColors.brand.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(AppSpace.rPill),
+                    ),
+                    child: Text('Score $score',
+                        style: const TextStyle(
+                            color: AppColors.brand,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 11.5)),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            ...rows.map((r) => Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 7),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(r.$1, size: 18, color: context.muted),
+                      const SizedBox(width: 12),
+                      SizedBox(
+                        width: 104,
+                        child: Text(r.$2,
+                            style: TextStyle(
+                                color: context.muted,
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w600)),
+                      ),
+                      Expanded(
+                        child: Text(r.$3,
+                            style: const TextStyle(
+                                fontSize: 14, fontWeight: FontWeight.w600)),
+                      ),
+                    ],
+                  ),
+                )),
+            if (desc.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text('Notes / requirement',
+                  style: TextStyle(
+                      color: context.muted,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700)),
+              const SizedBox(height: 4),
+              Text(desc,
+                  style: const TextStyle(fontSize: 14, height: 1.45)),
+            ],
+            if (tags.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 7,
+                runSpacing: 7,
+                children: tags
+                    .map((t) => Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: context.surfaceAlt,
+                            borderRadius: BorderRadius.circular(AppSpace.rPill),
+                          ),
+                          child: Text(t,
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: context.inkSoft)),
+                        ))
+                    .toList(),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _contactCard(Map<String, dynamic> l) {

@@ -128,8 +128,8 @@ class _CreateLeadScreenState extends State<CreateLeadScreen> {
       'Phone': _phone.text.trim(),
       'PrefDestination': _destination.text.trim(),
       'Description': _notes.text.trim(),
+      // LifecycleStage only — PipelineStage uses a different enum.
       'LifecycleStage': _lifecycle,
-      'PipelineStage': _lifecycle,
       'Priority': _priority,
     };
     try {
@@ -149,6 +149,7 @@ class _CreateLeadScreenState extends State<CreateLeadScreen> {
       } else {
         await api.post('/crm/leads/AddNew', data: {
           ...payload,
+          'Source': 'Direct',
           'LeadSource': 'TripClub Operations App',
         });
       }

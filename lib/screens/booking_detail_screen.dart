@@ -370,17 +370,52 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
     );
   }
 
+  String _people() {
+    final parts = <String>[];
+    int n(List<String> keys) {
+      for (final k in keys) {
+        final v = _f(k);
+        final i = v is num ? v.toInt() : int.tryParse('$v') ?? 0;
+        if (i > 0) return i;
+      }
+      return 0;
+    }
+
+    final adults = n(['NoOfAdults', 'NoGuests', 'Pax.Adults']);
+    final kids = n(['NoOfKids', 'NoChildren']);
+    if (adults > 0) parts.add('$adults adult${adults == 1 ? '' : 's'}');
+    if (kids > 0) parts.add('$kids child${kids == 1 ? '' : 'ren'}');
+    return parts.join(', ');
+  }
+
   Widget _detailsCard() {
     final rows = <(String, String)>[
-      ('Supplier', _str(['SupplierName'])),
-      ('Supplier ref', _str(['SupplierBookingId', 'SupplierBookingId'])),
-      ('Confirmation', _str(['ConfirmationNo'])),
+      // Service / itinerary
       ('Check-in', Fmt.date(_f('CheckInDate') ?? _f('TravelDate') ?? _f('SailingDate'))),
       ('Check-out', Fmt.date(_f('CheckOutDate'))),
-      ('Destination', _str(['HotelAddress', 'DeparturePort', 'visaCountry'])),
+      ('Destination',
+          _str(['HotelAddress', 'DeparturePort', 'visaCountry', 'Destination'])),
+      ('Guests', _people()),
+      ('Rooms', _str(['NoRooms'])),
+      ('Meal plan', _str(['MealPlan'])),
+      ('Room type', _str(['RoomType', 'RoomCategory'])),
+      // Transfer specifics
+      ('Pickup', _str(['PickupLocation'])),
+      ('Drop-off', _str(['DropOffLocation'])),
+      // Visa specifics
+      ('Visa type', _str(['visaType', 'VisaCategory'])),
+      // Cruise specifics
+      ('Cruise line', _str(['CruiseLine'])),
+      ('Duration', _str(['Duration']).isEmpty ? '' : '${_str(['Duration'])} nights'),
+      // Supplier
+      ('Supplier', _str(['SupplierName'])),
+      ('Supplier ref', _str(['SupplierBookingId'])),
+      ('Confirmation', _str(['ConfirmationNo'])),
+      ('Booked on', Fmt.date(_f('DateOfBooking') ?? _f('createdAt'))),
+      // Customer
       ('Email', _str(['customerData.Email'])),
       ('Phone', _str(['customerData.Phone'])),
-      ('Notes', _str(['Notes'])),
+      ('Notes', _str(['Notes', 'SpecialRequest'])),
     ].where((r) => r.$2.trim().isNotEmpty).toList();
     return AppCard(
       child: Column(

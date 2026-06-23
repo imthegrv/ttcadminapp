@@ -270,8 +270,21 @@ class _MeetingEditorScreenState extends State<MeetingEditorScreen> {
         ),
       );
 
+  void _toast(String message) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    }
+  }
+
   Future<void> _save() async {
-    if (_title.text.trim().isEmpty || !_end.isAfter(_start)) return;
+    if (_title.text.trim().isEmpty) {
+      _toast('Please add a title for the meeting.');
+      return;
+    }
+    if (!_end.isAfter(_start)) {
+      _toast('The end time must be after the start time.');
+      return;
+    }
     setState(() => _saving = true);
     try {
       final api = context.read<AuthProvider>().api;
@@ -286,9 +299,11 @@ class _MeetingEditorScreenState extends State<MeetingEditorScreen> {
       };
       String meetingId = (widget.meeting?['_id'] ?? '').toString();
       if (widget.meeting == null) {
+        // createMeeting responds with { success, meeting: {...} }.
         final created = await api.post('/crm/meetings/create', data: payload);
-        if (created is Map) {
-          meetingId = (created['_id'] ?? created['id'] ?? '').toString();
+        final m = created is Map ? (created['meeting'] ?? created) : null;
+        if (m is Map) {
+          meetingId = (m['_id'] ?? m['id'] ?? '').toString();
         }
       } else {
         await api.post('/crm/meetings/update/${widget.meeting!['_id']}', data: payload);
@@ -309,6 +324,9 @@ class _MeetingEditorScreenState extends State<MeetingEditorScreen> {
         }
       }
       if (mounted) Navigator.pop(context, true);
+    } catch (e) {
+      final s = e.toString();
+      _toast('Could not save meeting: ${s.length > 90 ? '${s.substring(0, 90)}…' : s}');
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -316,8 +334,12 @@ class _MeetingEditorScreenState extends State<MeetingEditorScreen> {
 
   Future<void> _delete() async {
     final id = (widget.meeting!['_id'] ?? '').toString();
-    await context.read<AuthProvider>().api.delete('/crm/meetings/$id');
-    await ReminderService.instance.cancelMeeting(id);
-    if (mounted) Navigator.pop(context, true);
+    try {
+      await context.read<AuthProvider>().api.delete('/crm/meetings/$id');
+      await ReminderService.instance.cancelMeeting(id);
+      if (mounted) Navigator.pop(context, true);
+    } catch (e) {
+      _toast('Could not delete meeting.');
+    }
   }
 }

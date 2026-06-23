@@ -9,6 +9,9 @@ import 'lead_wizard_screen.dart';
 import 'lead_detail_screen.dart';
 import 'booking_detail_screen.dart';
 import 'invoice_detail_screen.dart';
+import 'customer_detail_screen.dart';
+import 'visa_detail_screen.dart';
+import 'fixed_departure_detail_screen.dart';
 import 'mailbox_screen.dart';
 import 'follow_ups_screen.dart';
 import 'create_booking_screen.dart';
@@ -228,8 +231,12 @@ class ResourceCatalog {
         loader: (auth) => auth.api.post('/crm/customers/FindAll', data: {}),
         primaryFields: const ['FirstName', 'PersonName', 'CompanyName', 'Email'],
         subtitleFields: const ['Email', 'Phone'],
-        statusFields: const ['status'],
+        statusFields: const ['Status', 'CustomerType'],
         trailingFields: const ['createdAt'],
+        onItemTap: (c) => Navigator.push<bool>(
+          context,
+          MaterialPageRoute(builder: (_) => CustomerDetailScreen(customer: c)),
+        ),
       );
 
   static Widget emails(BuildContext context) => const MailboxScreen();
@@ -240,9 +247,43 @@ class ResourceCatalog {
         accent: AppColors.warning,
         loader: (auth) => auth.api
             .get('/tours/visa-countries', query: {'includeVisaType': true}),
-        primaryFields: const ['countryName', 'country'],
-        subtitleFields: const ['currency', 'visaCountryId'],
-        trailingFields: const ['currency'],
+        primaryFields: const ['country', 'countryName'],
+        subtitleFields: const ['visaCountryId'],
+        onItemTap: (c) => Navigator.push<bool>(
+          context,
+          MaterialPageRoute(builder: (_) => VisaDetailScreen(country: c)),
+        ),
+      );
+
+  static Widget fixedDepartures(BuildContext context) => ResourceListScreen(
+        title: 'Fixed departures',
+        icon: Icons.tour_rounded,
+        accent: AppColors.brand,
+        loader: (auth) => auth.api.get('/tours/fixed-departures'),
+        primaryFields: const ['package_name', 'title', 'slug'],
+        subtitleFields: const ['country', 'city'],
+        statusFields: const ['status'],
+        amountField: 'price',
+        currencyField: 'currency',
+        trailingFields: const ['startDate'],
+        emptyMessage: 'No fixed departures',
+        onItemTap: (d) => Navigator.push<bool>(
+          context,
+          MaterialPageRoute(
+              builder: (_) => FixedDepartureDetailScreen(departure: d)),
+        ),
+      );
+
+  static Widget holidays(BuildContext context) => ResourceListScreen(
+        title: 'Holidays',
+        icon: Icons.beach_access_rounded,
+        accent: AppColors.info,
+        loader: (auth) => auth.api.get('/tours/holidays'),
+        primaryFields: const ['name', 'title', 'package_name'],
+        subtitleFields: const ['country', 'summary', 'description'],
+        statusFields: const ['status'],
+        trailingFields: const ['nights'],
+        emptyMessage: 'No holidays published',
       );
 
   static Widget notifications(BuildContext context) => ResourceListScreen(
@@ -949,6 +990,10 @@ class MoreScreen extends StatelessWidget {
             AppColors.brandBright, () => const ChatScreen()),
         ('Visa prices', 'Look up visa fees by country', Icons.badge_outlined,
             AppColors.success, () => ResourceCatalog.visa(context)),
+        ('Fixed departures', 'Browse planned group tours', Icons.tour_rounded,
+            AppColors.brand, () => ResourceCatalog.fixedDepartures(context)),
+        ('Holidays', 'Browse holiday packages', Icons.beach_access_rounded,
+            AppColors.info, () => ResourceCatalog.holidays(context)),
         ('Notifications', 'All your recent alerts',
             Icons.notifications_none_rounded, AppColors.brand,
             () => ResourceCatalog.notifications(context)),
