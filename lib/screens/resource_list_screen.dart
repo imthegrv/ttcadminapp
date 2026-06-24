@@ -27,6 +27,7 @@ class ResourceListScreen extends StatefulWidget {
     this.emptyMessage = 'Nothing here yet',
     this.floatingAction,
     this.onItemTap,
+    this.where,
   });
 
   final String title;
@@ -54,6 +55,9 @@ class ResourceListScreen extends StatefulWidget {
   final Widget? floatingAction;
   final ResourceTap? onItemTap;
 
+  /// Optional client-side filter applied after loading (e.g. "my leads").
+  final bool Function(Map<String, dynamic>)? where;
+
   @override
   State<ResourceListScreen> createState() => _ResourceListScreenState();
 }
@@ -80,7 +84,9 @@ class _ResourceListScreenState extends State<ResourceListScreen> {
     try {
       final raw = await widget.loader(context.read<AuthProvider>());
       if (!mounted) return;
-      setState(() => _items = _extract(raw));
+      var extracted = _extract(raw);
+      if (widget.where != null) extracted = extracted.where(widget.where!).toList();
+      setState(() => _items = extracted);
     } catch (error) {
       if (!mounted) return;
       setState(() => _error = _friendlyError(error));

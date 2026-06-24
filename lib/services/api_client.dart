@@ -35,6 +35,9 @@ class ApiClient {
   Future<dynamic> patch(String path, {dynamic data}) async =>
       (await _dio.patch(path, data: data)).data;
 
+  Future<dynamic> put(String path, {dynamic data}) async =>
+      (await _dio.put(path, data: data)).data;
+
   Future<dynamic> delete(String path, {dynamic data}) async =>
       (await _dio.delete(path, data: data)).data;
 }

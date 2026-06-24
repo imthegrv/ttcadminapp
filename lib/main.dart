@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'providers/auth_provider.dart';
 import 'providers/theme_controller.dart';
+import 'providers/notification_center.dart';
 import 'screens/login_screen.dart';
 import 'screens/operations_shell.dart';
 import 'services/navigation_service.dart';
@@ -17,6 +18,7 @@ Future<void> main() async {
       providers: [
         ChangeNotifierProvider.value(value: auth),
         ChangeNotifierProvider.value(value: theme),
+        ChangeNotifierProvider(create: (_) => NotificationCenter()),
       ],
       child: const TripClubAdminApp(),
     ),

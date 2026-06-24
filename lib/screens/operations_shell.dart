@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/theme_controller.dart';
+import '../providers/notification_center.dart';
 import '../theme/app_theme.dart';
 import '../utils/formatters.dart';
 import '../widgets/common.dart';
@@ -13,7 +14,12 @@ import 'customer_detail_screen.dart';
 import 'visa_detail_screen.dart';
 import 'fixed_departure_detail_screen.dart';
 import 'mailbox_screen.dart';
+import 'notifications_screen.dart';
 import 'follow_ups_screen.dart';
+import 'settings_screen.dart';
+import 'tasks_screen.dart';
+import 'analytics_screen.dart';
+import 'global_search_screen.dart';
 import 'create_booking_screen.dart';
 import 'create_invoice_screen.dart';
 import 'meeting_management_screen.dart';
@@ -44,6 +50,11 @@ class _OperationsShellState extends State<OperationsShell> {
           (auth.user['_id'] ?? auth.user['id'] ?? '').toString();
       SocketService.instance
           .connect(userId: userId, companyId: auth.companyId);
+      // Live in-app notifications (leads, customers, bookings, …) over the
+      // socket → local OS notification + unread badge.
+      context
+          .read<NotificationCenter>()
+          .bind(auth.api, userId, SocketService.instance);
     });
   }
 
@@ -286,17 +297,48 @@ class ResourceCatalog {
         emptyMessage: 'No holidays published',
       );
 
-  static Widget notifications(BuildContext context) => ResourceListScreen(
-        title: 'Notifications',
-        icon: Icons.notifications_none_rounded,
-        accent: AppColors.accent,
-        loader: (auth) => auth.api.get('/notifications',
-            query: {'page': 1, 'limit': 40, 'type': 'all'}),
-        primaryFields: const ['title', 'message'],
-        subtitleFields: const ['message', 'body'],
-        statusFields: const ['type'],
-        trailingFields: const ['createdAt'],
-      );
+  static Widget notifications(BuildContext context) =>
+      const NotificationsScreen();
+
+  /// Leads assigned to the current employee.
+  static Widget myLeads(BuildContext context) {
+    final u = context.read<AuthProvider>().user;
+    final myId = (u['_id'] ?? u['id'] ?? '').toString().toLowerCase();
+    final myEmail = (u['Email'] ?? u['email'] ?? '').toString().toLowerCase();
+    bool mine(Map<String, dynamic> lead) {
+      final a = lead['AssignedTo'];
+      if (a is! List) return false;
+      return a.any((e) {
+        if (e is Map) {
+          final keys = [e['_id'], e['id'], e['Email'], e['email']]
+              .map((v) => (v ?? '').toString().toLowerCase());
+          return keys.contains(myId) || keys.contains(myEmail);
+        }
+        return e.toString().toLowerCase() == myId;
+      });
+    }
+
+    return ResourceListScreen(
+      title: 'My leads',
+      icon: Icons.assignment_ind_rounded,
+      useInitials: true,
+      loader: (auth) => auth.api.get('/crm/leads/FindAll'),
+      where: mine,
+      primaryFields: const ['FirstName', 'CompanyName', 'Email', 'LeadId'],
+      subtitleFields: const ['Email', 'Phone', 'PrefDestination'],
+      statusFields: const ['LifecycleStage', 'Priority'],
+      trailingFields: const ['createdAt'],
+      emptyMessage: 'No leads assigned to you',
+      onItemTap: (lead) {
+        final id = (lead['_id'] ?? lead['id'] ?? lead['LeadId'] ?? '').toString();
+        return Navigator.push<bool>(
+          context,
+          MaterialPageRoute(
+              builder: (_) => LeadDetailScreen(leadId: id, initial: lead)),
+        );
+      },
+    );
+  }
 }
 
 /// ---------------------------------------------------------------------------
@@ -434,6 +476,7 @@ class _DashboardState extends State<_Dashboard> {
     if (yes != true) return;
     await PushNotificationService.instance.unregister(auth.api);
     SocketService.instance.dispose();
+    if (context.mounted) context.read<NotificationCenter>().unbind();
     await auth.logout();
   }
 
@@ -451,6 +494,10 @@ class _DashboardState extends State<_Dashboard> {
           AppColors.success, () => const CreateInvoiceScreen()),
       _QuickAction('Follow-ups', Icons.notifications_active_rounded,
           AppColors.danger, () => const FollowUpsScreen()),
+      _QuickAction('Tasks', Icons.task_alt_rounded, AppColors.info,
+          () => const TasksScreen()),
+      _QuickAction('Analytics', Icons.insights_rounded, AppColors.success,
+          () => const AnalyticsScreen()),
       _QuickAction('Meetings', Icons.event_rounded, AppColors.accent,
           () => const MeetingManagementScreen()),
       _QuickAction('Customers', Icons.groups_2_rounded, AppColors.warning,
@@ -471,7 +518,11 @@ class _DashboardState extends State<_Dashboard> {
             automaticallyImplyLeading: false,
             title: Row(
               children: [
-                InitialsAvatar(auth.displayName, size: 44),
+                GestureDetector(
+                  onTap: () => Navigator.push(context,
+                      MaterialPageRoute(builder: (_) => const SettingsScreen())),
+                  child: InitialsAvatar(auth.displayName, size: 44),
+                ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -499,18 +550,22 @@ class _DashboardState extends State<_Dashboard> {
             ),
             actions: [
               IconButton(
+                tooltip: 'Search',
+                onPressed: () => Navigator.push(context,
+                    MaterialPageRoute(builder: (_) => const GlobalSearchScreen())),
+                icon: const Icon(Icons.search_rounded),
+              ),
+              IconButton(
                 tooltip: context.isDark ? 'Light mode' : 'Dark mode',
                 onPressed: () => context.read<ThemeController>().toggle(context),
                 icon: Icon(context.isDark
                     ? Icons.light_mode_rounded
                     : Icons.dark_mode_rounded),
               ),
-              IconButton(
-                tooltip: 'Notifications',
-                onPressed: () => Navigator.push(context,
+              _NotificationBell(
+                onTap: () => Navigator.push(context,
                     MaterialPageRoute(
                         builder: (_) => ResourceCatalog.notifications(context))),
-                icon: const Icon(Icons.notifications_none_rounded),
               ),
               IconButton(
                 tooltip: 'Sign out',
@@ -939,6 +994,50 @@ class _QuickAction {
   final Widget Function() builder;
 }
 
+/// Bell icon with a live unread-count badge fed by [NotificationCenter].
+class _NotificationBell extends StatelessWidget {
+  const _NotificationBell({required this.onTap});
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final unread = context.watch<NotificationCenter>().unread;
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        IconButton(
+          tooltip: 'Notifications',
+          onPressed: onTap,
+          icon: const Icon(Icons.notifications_none_rounded),
+        ),
+        if (unread > 0)
+          Positioned(
+            top: 8,
+            right: 6,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+              constraints: const BoxConstraints(minWidth: 17, minHeight: 17),
+              decoration: BoxDecoration(
+                color: AppColors.danger,
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(color: context.canvas, width: 1.5),
+              ),
+              child: Text(
+                unread > 99 ? '99+' : '$unread',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    height: 1.3),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
 class _Stat {
   const _Stat(this.label, this.value, this.icon, this.color, this.jumpTo);
   final String label;
@@ -980,6 +1079,12 @@ class MoreScreen extends StatelessWidget {
       [
         ('Follow-ups', 'Leads due for follow-up', Icons.notifications_active_rounded,
             AppColors.danger, () => const FollowUpsScreen()),
+        ('My leads', 'Leads assigned to you', Icons.assignment_ind_rounded,
+            AppColors.brand, () => ResourceCatalog.myLeads(context)),
+        ('Tasks', 'Assign & track team to-dos', Icons.task_alt_rounded,
+            AppColors.info, () => const TasksScreen()),
+        ('Analytics', 'Lead KPIs & pipeline breakdown', Icons.insights_rounded,
+            AppColors.success, () => const AnalyticsScreen()),
         ('Customers', 'Browse your client directory', Icons.groups_2_rounded,
             AppColors.warning, () => ResourceCatalog.customers(context)),
         ('Meetings', 'Schedule and manage meetings', Icons.event_rounded,
@@ -997,6 +1102,9 @@ class MoreScreen extends StatelessWidget {
         ('Notifications', 'All your recent alerts',
             Icons.notifications_none_rounded, AppColors.brand,
             () => ResourceCatalog.notifications(context)),
+        ('Profile & settings', 'Theme, account, sign out',
+            Icons.settings_rounded, AppColors.muted,
+            () => const SettingsScreen()),
       ];
 
   @override

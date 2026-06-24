@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import '../theme/app_theme.dart';
 import '../utils/formatters.dart';
 import '../widgets/common.dart';
+import '../widgets/contact_actions.dart';
 
 class CustomerDetailScreen extends StatelessWidget {
   const CustomerDetailScreen({super.key, required this.customer});
@@ -106,6 +107,15 @@ class CustomerDetailScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 14),
+
+          if (_str(['Phone', 'phone']).isNotEmpty ||
+              _str(['Email', 'email']).isNotEmpty) ...[
+            ContactActions(
+              phone: _str(['Phone', 'phone']),
+              email: _str(['Email', 'email']),
+            ),
+            const SizedBox(height: 14),
+          ],
 
           if (outstanding != null)
             _accountCard(context, outstanding),

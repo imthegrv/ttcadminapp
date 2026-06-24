@@ -21,6 +21,7 @@ class ReminderService {
 
   static const _channelId = 'tripclub_followups';
   static const _meetingChannelId = 'tripclub_meetings';
+  static const _alertChannelId = 'tripclub_alerts';
 
   Future<void> init() async {
     if (_ready || kIsWeb) return;
@@ -55,9 +56,60 @@ class ReminderService {
         description: 'Reminders before scheduled meetings start.',
         importance: Importance.high,
       ));
+      await android?.createNotificationChannel(const AndroidNotificationChannel(
+        _alertChannelId,
+        'Live alerts',
+        description: 'New leads, bookings, customers and other live activity.',
+        importance: Importance.high,
+      ));
       _ready = true;
     } catch (e) {
       debugPrint('[reminders] init failed: $e');
+    }
+  }
+
+  int _alertSeq = 700000;
+
+  /// Show an immediate local notification for a live socket alert. Works on
+  /// iOS even without push entitlements (it's a local notification). Tapping
+  /// deep-links via [link]/[type].
+  Future<void> showAlert({
+    required String title,
+    required String body,
+    String? type,
+    String? link,
+  }) async {
+    await init();
+    if (!_ready) return;
+    try {
+      await _plugin.show(
+        _alertSeq++,
+        title,
+        body,
+        const NotificationDetails(
+          android: AndroidNotificationDetails(
+            _alertChannelId,
+            'Live alerts',
+            channelDescription:
+                'New leads, bookings, customers and other live activity.',
+            importance: Importance.high,
+            priority: Priority.high,
+          ),
+          iOS: DarwinNotificationDetails(
+            presentAlert: true,
+            presentBadge: true,
+            presentSound: true,
+          ),
+          macOS: DarwinNotificationDetails(
+            presentAlert: true,
+            presentBadge: true,
+            presentSound: true,
+          ),
+        ),
+        payload: jsonEncode({'type': type ?? '', 'link': link ?? ''}),
+      );
+    } catch (e) {
+      debugPrint('[alerts] show failed: $e');
     }
   }
 

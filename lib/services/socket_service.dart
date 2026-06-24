@@ -17,6 +17,7 @@ class SocketService {
 
   final _messages = StreamController<Map<String, dynamic>>.broadcast();
   final _typing = StreamController<Map<String, dynamic>>.broadcast();
+  final _notifications = StreamController<Map<String, dynamic>>.broadcast();
   final connected = ValueNotifier<bool>(false);
 
   /// Every `newMessage` pushed by the server.
@@ -24,6 +25,10 @@ class SocketService {
 
   /// `typing` events: `{ sender, room }`.
   Stream<Map<String, dynamic>> get typing => _typing.stream;
+
+  /// `app-notification` events — the full notification object the backend
+  /// broadcasts to the company room (leads, bookings, customers, tasks, …).
+  Stream<Map<String, dynamic>> get notifications => _notifications.stream;
 
   bool get isConnected => _socket?.connected ?? false;
   String? get userId => _userId;
@@ -68,6 +73,9 @@ class SocketService {
       })
       ..on('typing', (data) {
         if (data is Map) _typing.add(Map<String, dynamic>.from(data));
+      })
+      ..on('app-notification', (data) {
+        if (data is Map) _notifications.add(Map<String, dynamic>.from(data));
       });
 
     _socket = socket;

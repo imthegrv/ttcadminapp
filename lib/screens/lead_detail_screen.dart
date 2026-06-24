@@ -6,7 +6,9 @@ import '../services/reminder_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/formatters.dart';
 import '../widgets/common.dart';
+import '../widgets/contact_actions.dart';
 import 'create_lead_screen.dart';
+import 'employee_picker_screen.dart';
 
 /// Lifecycle stages mirroring the backend lead model enum, in order.
 const kLeadStages = [
@@ -164,10 +166,17 @@ class _LeadDetailScreenState extends State<LeadDetailScreen> {
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 40),
         children: [
           _header(l),
+          const SizedBox(height: 14),
+          ContactActions(
+            phone: (l['Phone'] ?? '').toString(),
+            email: (l['Email'] ?? '').toString(),
+          ),
           const SizedBox(height: 16),
           _stagePicker(l),
           const SizedBox(height: 14),
           _quickAttributes(l),
+          const SizedBox(height: 14),
+          _assigneeCard(l),
           const SizedBox(height: 14),
           _followUpCard(l),
           const SizedBox(height: 14),
@@ -378,6 +387,96 @@ class _LeadDetailScreenState extends State<LeadDetailScreen> {
           StatusChip(value),
         ],
       ),
+    );
+  }
+
+  List<Map<String, dynamic>> _assignees(Map<String, dynamic> l) {
+    final a = l['AssignedTo'];
+    if (a is List) {
+      return a.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+    }
+    return [];
+  }
+
+  Widget _assigneeCard(Map<String, dynamic> l) {
+    final assignees = _assignees(l);
+    final names = assignees
+        .map((e) =>
+            '${e['FirstName'] ?? ''} ${e['LastName'] ?? ''}'.trim().isEmpty
+                ? (e['name'] ?? e['Email'] ?? 'Member').toString()
+                : '${e['FirstName'] ?? ''} ${e['LastName'] ?? ''}'.trim())
+        .toList();
+
+    return AppCard(
+      padding: const EdgeInsets.all(14),
+      onTap: _busy ? null : _assignLead,
+      child: Row(
+        children: [
+          Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: (assignees.isEmpty ? context.muted : AppColors.brand)
+                  .withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(Icons.assignment_ind_rounded,
+                color: assignees.isEmpty ? context.muted : AppColors.brand),
+          ),
+          const SizedBox(width: 13),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Assigned to',
+                    style: TextStyle(
+                        color: context.muted,
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w700)),
+                const SizedBox(height: 2),
+                Text(names.isEmpty ? 'Unassigned — tap to assign' : names.join(', '),
+                    style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14.5,
+                        color: names.isEmpty ? context.muted : context.ink)),
+              ],
+            ),
+          ),
+          Icon(Icons.edit_outlined, color: context.faint, size: 18),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _assignLead() async {
+    final current = _assignees(_lead ?? const {});
+    final picked = await Navigator.push<List<Map<String, dynamic>>>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => EmployeePickerScreen(
+          multiSelect: true,
+          title: 'Assign lead',
+          preselectedIds:
+              current.map((e) => (e['_id'] ?? e['id'] ?? '').toString()).toSet(),
+        ),
+      ),
+    );
+    if (picked == null) return;
+    final assignedTo = picked
+        .map((e) => {
+              '_id': (e['_id'] ?? e['id'] ?? '').toString(),
+              'FirstName': e['FirstName'] ?? '',
+              'LastName': e['LastName'] ?? '',
+              'Email': e['Email'] ?? e['email'] ?? '',
+            })
+        .toList();
+    final names = picked
+        .map((e) => '${e['FirstName'] ?? ''} ${e['LastName'] ?? ''}'.trim())
+        .where((s) => s.isNotEmpty)
+        .join(', ');
+    await _patch(
+      {'AssignedTo': assignedTo},
+      action: names.isEmpty ? 'Lead unassigned' : 'Assigned to $names',
     );
   }
 
