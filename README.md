@@ -96,6 +96,48 @@ Distribute the generated `.app` inside a signed/notarized DMG for the smoothest
 installation. An unsigned internal build can be opened manually, but macOS
 Gatekeeper will show additional warnings.
 
+iOS (internal, no App Store):
+
+```sh
+flutter pub get
+cd ios && pod install && cd ..
+# Quick run on a connected device:
+flutter run --release -d <device-id> --dart-define=TTC_API_URL=https://v1api.thetripclub.com/v2
+# Signed IPA for ad-hoc distribution:
+flutter build ipa --release --export-method ad-hoc --dart-define=TTC_API_URL=https://v1api.thetripclub.com/v2
+```
+
+Bundle id is `com.thetripclub.operations`, minimum iOS 13.
+
+### Free internal distribution via SideStore / AltStore
+
+No paid Apple account needed. Build an **unsigned** IPA — SideStore re-signs it
+on-device with a free Apple ID:
+
+```sh
+./scripts/build_sideload_ipa.sh
+# → build/ios/ttcadmin-sideload.ipa
+```
+
+Per device (one-time): install SideStore (initial AltServer step on a computer),
+enable **Settings → Privacy & Security → Developer Mode**, sign in with a free
+Apple ID, then in SideStore tap **+** and pick the `.ipa`. Keep SideStore's
+WireGuard VPN on so it auto-refreshes the **7-day** signature computer-free.
+
+Caveats: the 7-day refresh is fragile (a missed refresh locks the app until
+re-signed); free Apple IDs can't use **push notifications** (FCM is inactive,
+but local lead/meeting reminders still work); ~3 sideloaded apps per device.
+Updating the app = rebuild and re-sideload the new IPA.
+
+### Paid options (more reliable)
+
+A paid Apple Developer account ($99/yr) unlocks **Ad Hoc** (register device
+UDIDs → ad-hoc IPA → install via Apple Configurator over USB / Diawi / an OTA
+manifest, valid ~1 year) or **TestFlight internal testers** (no public listing,
+no review, auto-updates). Real iOS push additionally needs a Push Notifications
+capability, an APNs key in Firebase, and `GoogleService-Info.plist` in
+`ios/Runner/`.
+
 ## Over-the-air updates (Shorebird code push)
 
 Because the app is sideloaded (no store), [Shorebird](https://shorebird.dev)
