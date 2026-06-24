@@ -96,6 +96,43 @@ Distribute the generated `.app` inside a signed/notarized DMG for the smoothest
 installation. An unsigned internal build can be opened manually, but macOS
 Gatekeeper will show additional warnings.
 
+## Over-the-air updates (Shorebird code push)
+
+Because the app is sideloaded (no store), [Shorebird](https://shorebird.dev)
+lets us push **Dart-only** fixes over the air — installed apps self-update on
+next launch, no re-install. Config lives in `shorebird.yaml` (bundled as a
+Flutter asset via `pubspec.yaml`).
+
+One-time setup:
+
+```sh
+curl --proto '=https' --tlsv1.2 https://raw.githubusercontent.com/shorebirdtech/install/main/install.sh -sSf | bash
+shorebird login
+shorebird init        # writes the real app_id into shorebird.yaml
+```
+
+Cut a release (installable APK **and** a patch target). Do this whenever native
+code, plugins, dependencies, or the app version change:
+
+```sh
+shorebird release android --artifact apk -- --dart-define=TTC_API_URL=https://v1api.thetripclub.com/v2
+```
+
+Push a Dart-only OTA patch to the latest release (UI/logic fixes only):
+
+```sh
+shorebird patch android -- --dart-define=TTC_API_URL=https://v1api.thetripclub.com/v2
+```
+
+macOS code push works the same way (`shorebird release macos` / `shorebird
+patch macos`). On CI, `codemagic.yaml` defines `android-release` and
+`android-patch` workflows — set a `SHOREBIRD_TOKEN` env var (from
+`shorebird login:ci`) in a Codemagic env group named `shorebird`.
+
+What a patch **cannot** change: native code, plugins/dependencies, the Flutter
+engine version, or `minSdk`. Those require a new `shorebird release`. Keep the
+release's Flutter version pinned so patches stay compatible.
+
 ## Next implementation slices
 
 1. Lead assignment and follow-up reminders.

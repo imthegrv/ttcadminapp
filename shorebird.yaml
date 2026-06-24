@@ -1,0 +1,15 @@
+# Shorebird code-push configuration — https://docs.shorebird.dev
+#
+# IMPORTANT: replace the placeholder app_id below with your real one.
+# The real id is created when you run, from this directory:
+#
+#     shorebird login        # one-time, opens a browser
+#     shorebird init         # registers the app and writes the real app_id here
+#
+# (or copy it from https://console.shorebird.dev). Releases/patches made with a
+# placeholder id will NOT be reachable by installed apps.
+app_id: REPLACE_WITH_SHOREBIRD_APP_ID
+
+# Check for and apply patches automatically on launch. Keep this on so
+# sideloaded Android / macOS installs self-update over the air.
+auto_update: true

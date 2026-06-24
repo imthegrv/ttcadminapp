@@ -1,0 +1,82 @@
+# Codemagic CI/CD for TripClub Operations (ttcadmin) with Shorebird code push.
+# Docs: https://docs.shorebird.dev/ci/codemagic
+#
+# One-time setup in Codemagic before running these:
+#   1. Generate a Shorebird CI token locally:   shorebird login:ci
+#   2. In Codemagic → app settings → Environment variables, create a group
+#      named "shorebird" with a variable  SHOREBIRD_TOKEN  = <that token>
+#      (mark it secure). The Shorebird CLI reads SHOREBIRD_TOKEN automatically.
+#   3. Make sure shorebird.yaml has a real app_id (run `shorebird init` once).
+#
+# NOTE: committing this file makes Codemagic use these YAML workflows instead
+# of the UI "Default Workflow" — pick the workflow you want in the build dialog.
+# These are Android-only (Shorebird Android is stable), which also sidesteps the
+# iOS signing step that was failing before.
+
+definitions:
+  shared: &shared_env
+    flutter: stable
+    groups:
+      - shorebird
+    vars:
+      TTC_API_URL: "https://v1api.thetripclub.com/v2"
+      # Pin the Flutter version so patches stay compatible with the release
+      # they target. Verify it is supported: `shorebird flutter versions list`.
+      SHOREBIRD_FLUTTER_VERSION: "3.29.0"
+
+  install_shorebird: &install_shorebird
+    name: Install Shorebird CLI
+    script: |
+      curl --proto '=https' --tlsv1.2 \
+        https://raw.githubusercontent.com/shorebirdtech/install/main/install.sh -sSf | bash
+      echo 'PATH=$HOME/.shorebird/bin:$PATH' >> "$CM_ENV"
+
+workflows:
+  # ── Cut a new release: produces an installable APK AND registers the release
+  #    on Shorebird so future patches can target it. Run this when native code,
+  #    plugins, dependencies, or the app version change.
+  android-release:
+    name: Android · Shorebird Release (APK)
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    environment:
+      <<: *shared_env
+    scripts:
+      - *install_shorebird
+      - name: Shorebird doctor
+        script: shorebird doctor
+      - name: Shorebird release (APK)
+        script: |
+          shorebird release android \
+            --artifact apk \
+            --flutter-version="$SHOREBIRD_FLUTTER_VERSION" \
+            -- --dart-define=TTC_API_URL="$TTC_API_URL"
+    artifacts:
+      - build/**/outputs/**/*.apk
+      - build/**/outputs/**/mapping.txt
+    publishing:
+      email:
+        recipients:
+          - imthegrv@gmail.com
+        notify:
+          success: true
+          failure: true
+
+  # ── Push a Dart-only OTA update to the LATEST matching release. Use this for
+  #    UI/logic fixes (e.g. the lead/meeting fixes) — no re-install needed.
+  #    Cannot change native code/plugins/assets-incompatible changes; cut a new
+  #    release for those.
+  android-patch:
+    name: Android · Shorebird Patch (OTA)
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    environment:
+      <<: *shared_env
+    scripts:
+      - *install_shorebird
+      - name: Shorebird patch (Dart-only OTA)
+        script: |
+          # Add --release-version="1.0.0+1" to target a specific release.
+          shorebird patch android \
+            --flutter-version="$SHOREBIRD_FLUTTER_VERSION" \
+            -- --dart-define=TTC_API_URL="$TTC_API_URL"
